@@ -12,7 +12,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container
 builder.Services.AddHttpClient();
-builder.Services.AddTransient<SmartThingsService>();
+builder.Services.AddSingleton<SmartThingsService>();
 builder.Services.AddTransient<SolarmanService>();
 builder.Services.AddSingleton<HomeConnectService>();
 
@@ -343,7 +343,8 @@ app.MapGet("/api/homeconnect/callback", async (HttpContext context, HomeConnectS
 app.MapGet("/api/smartthings/login", (HttpContext context, SmartThingsService smartThingsService) =>
 {
     // Set your redirect URI (must match what is registered in SmartThings dev portal)
-    var redirectUri = "localhost:55272/api/smartthings/callback";
+    var redirectUri = "https://85efd086bd29.ngrok-free.app/api/smartthings/callback";
+    // var redirectUri = "localhost";
     var url = smartThingsService.GetAuthorizationUrl(redirectUri, "r:devices:*");
     context.Response.Redirect(url);
     return Task.CompletedTask;
@@ -363,7 +364,7 @@ app.MapGet("/api/smartthings/callback", async (HttpContext context, SmartThingsS
         await context.Response.WriteAsync("<h2>No authorization code received.</h2>");
         return;
     }
-    var redirectUri = "https://localhost:55272/api/smartthings/callback";
+    var redirectUri = "https://85efd086bd29.ngrok-free.app/api/smartthings/callback";
     var success = await smartThingsService.ExchangeAuthorizationCodeAsync(code, redirectUri);
     if (success)
         await context.Response.WriteAsync("<h2>SmartThings authorization successful! You may now use SmartThings features.</h2>");

@@ -11,12 +11,17 @@ public class HomeConnectService
     private string? _accessToken;
     private const string DeviceCodeEndpoint = "https://api.home-connect.com/security/oauth/device_authorization";
     private const string TokenEndpoint = "https://api.home-connect.com/security/oauth/token";
-    private readonly string clientId = "6C0CF95D82BDC2042AE653F7C6871CB44B41076BDEDD45B522FA296BFD90FEB7";
-    private readonly string clientSecret = "3062316D23266130D5081391FDDF18300584E784635EFDB48E43FE5C8177C626";
+    private readonly string clientId;
+    private readonly string clientSecret;
 
+    /// <summary>
+    /// Requires environment variables: HOMECONNECT_CLIENT_ID and HOMECONNECT_CLIENT_SECRET
+    /// </summary>
     public HomeConnectService(HttpClient httpClient)
     {
         _httpClient = httpClient;
+        clientId = Environment.GetEnvironmentVariable("HOMECONNECT_CLIENT_ID") ?? throw new InvalidOperationException("HOMECONNECT_CLIENT_ID env variable not set");
+        clientSecret = Environment.GetEnvironmentVariable("HOMECONNECT_CLIENT_SECRET") ?? throw new InvalidOperationException("HOMECONNECT_CLIENT_SECRET env variable not set");
     }
 
     public async Task<bool> AuthenticateAsync(string accessToken)

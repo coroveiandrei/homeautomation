@@ -1,0 +1,14 @@
+{
+  "appName": "andreloginapp1231",
+  "displayName": "final one",
+  "description": "A SmartApp using Authorization Code flow",
+  "singleInstance": false,
+  "classifications": ["CONNECTED_SERVICE"],
+  "appType": "API_ONLY",
+  "oauth": {
+	"clientName": "Andrei Test App",
+    "redirectUris": ["https://localhost:55272/api/smartthings/callback","https://localhost:55272/api/smartthings/callback", "localhost", "https://85efd086bd29.ngrok-free.app/api/smartthings/callback"],
+    "scope": ["r:devices:*", "w:devices:*"],
+    "grantTypes": ["authorization_code"]
+  }
+}

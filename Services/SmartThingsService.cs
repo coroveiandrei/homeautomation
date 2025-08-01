@@ -11,15 +11,20 @@ public class SmartThingsService
 {
     private readonly HttpClient _httpClient;
     private string? _accessToken;
-    private readonly string _clientId = "70b6cb9e-a787-4e30-8c90-d39abdb90333"; // TODO: Set from config/env
-    private readonly string _clientSecret = ""; // TODO: Set from config/env
-    private const string BaseUrl = "https://api.smartthings.com/v1";
+    private readonly string _clientId;
+    private readonly string _clientSecret;
+    private const string BaseUrl = "https://api.smartthings.com/v1";    
     private const string AuthUrl = "https://api.smartthings.com/v1/oauth/authorize";
     private const string TokenUrl = "https://api.smartthings.com/v1/oauth/token";
 
+    /// <summary>
+    /// Requires environment variables: SMARTTHINGS_CLIENT_ID and SMARTTHINGS_CLIENT_SECRET
+    /// </summary>
     public SmartThingsService(HttpClient httpClient)
     {
         _httpClient = httpClient;
+        _clientId = Environment.GetEnvironmentVariable("SMARTTHINGS_CLIENT_ID") ?? throw new InvalidOperationException("SMARTTHINGS_CLIENT_ID env variable not set");
+        _clientSecret = Environment.GetEnvironmentVariable("SMARTTHINGS_CLIENT_SECRET") ?? throw new InvalidOperationException("SMARTTHINGS_CLIENT_SECRET env variable not set");
     }
 
     public string GetAuthorizationUrl(string redirectUri, string scope = "r:devices:*")
@@ -41,6 +46,12 @@ public class SmartThingsService
                 ["redirect_uri"] = redirectUri
             })
         };
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        // Add Basic Authentication header with client_id:client_secret
+        var basicAuthValue = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_clientId}:{_clientSecret}"));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Basic", basicAuthValue);
+
         var response = await _httpClient.SendAsync(request);
         var json = await response.Content.ReadAsStringAsync();
         if (response.IsSuccessStatusCode)
