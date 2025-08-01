@@ -14,7 +14,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpClient();
 builder.Services.AddTransient<SmartThingsService>();
 builder.Services.AddTransient<SolarmanService>();
-builder.Services.AddTransient<BoschService>();
+builder.Services.AddSingleton<HomeConnectService>();
 
 var app = builder.Build();
 
@@ -57,7 +57,7 @@ app.MapGet("/", async (HttpContext context) =>
         .device-status { margin-bottom: 10px; }
         .device-online { color: #4CAF50; font-weight: 500; }
         .device-offline { color: #f44336; font-weight: 500; }
-        .capability { background: white; padding: 10px 15px; margin: 5px 0; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; }
+        .capability { background: white; padding: 10px 15px, 5px 15px; margin: 5px 0; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; }
         .capability-name { font-weight: 500; color: #555; }
         .capability-value { background: #e3f2fd; color: #1976d2; padding: 4px 12px; border-radius: 15px; font-weight: 500; }
         .loading { text-align: center; padding: 50px; color: #666; font-size: 1.2em; }
@@ -66,6 +66,9 @@ app.MapGet("/", async (HttpContext context) =>
         .refresh-btn:hover { background: #1976D2; }
         .solar-section { margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px; }
         .chart-container { position: relative; height: 400px; margin-top: 20px; }
+        .smartthings-btn { background: #1976D2; color: white; border: none; padding: 12px 24px; border-radius: 25px; cursor: pointer; font-size: 1em; margin-left: 10px; text-decoration: none; transition: background 0.3s; }
+        .smartthings-btn:hover { background: #0d47a1; }
+        .homeconnect-btn:hover { background: #d84315; }
     </style>
 </head>
 <body>
@@ -73,6 +76,8 @@ app.MapGet("/", async (HttpContext context) =>
         <div class="header">
             <h1>🏠 Smart Home Automation</h1>
             <button class="refresh-btn" onclick="loadDevices()">🔄 Refresh Devices</button>
+            <a href="/api/homeconnect/login" class="homeconnect-btn">🔑 Login with Home Connect</a>
+            <a href="/api/smartthings/login" class="smartthings-btn">🔑 Connect to SmartThings</a>
         </div>
         <div class="content">
             <div class="solar-section">
@@ -161,7 +166,7 @@ app.MapGet("/", async (HttpContext context) =>
                     devicesDiv.innerHTML = '<div class="error">No devices found.</div>';
                     return;
                 }
-                
+
                 devicesDiv.innerHTML = devices.map(device => {
                     const sourceClass = device.source?.toLowerCase() === 'bosch' ? 'bosch' : 'smartthings';
                     const sourceIcon = device.source?.toLowerCase() === 'bosch' ? '🔧' : '📱';
@@ -212,55 +217,63 @@ app.MapGet("/", async (HttpContext context) =>
     await context.Response.WriteAsync(html);
 });
 
-app.MapGet("/api/devices", async (SmartThingsService smartThingsService, BoschService boschService) =>
+app.MapGet("/api/devices", async (SmartThingsService smartThingsService, HomeConnectService homeConnectService) =>
 {
     try
     {
         var allDevices = new List<object>();
-        
-        // Get SmartThings devices
-        var smartThingsDevices = await smartThingsService.GetDevicesWithStatusAsync();
-        allDevices.AddRange(smartThingsDevices.Select(d => new
+        try
         {
-            deviceId = d.DeviceId,
-            name = d.Name,
-            label = d.Label,
-            deviceTypeName = d.DeviceTypeName,
-            capabilities = d.Capabilities,
-            source = "SmartThings",
-            manufacturer = "Samsung"
-        }));
-        
-        // Get Bosch devices
-        var boschDevices = await boschService.GetDevicesAsync();
-        allDevices.AddRange(boschDevices.Select(d => new
+            // Get SmartThings devices
+            var smartThingsDevices = await smartThingsService.GetDevicesWithStatusAsync();
+            allDevices.AddRange(smartThingsDevices.Select(d => new
+            {
+                deviceId = d.DeviceId,
+                name = d.Name,
+                label = d.Label,
+                deviceTypeName = d.DeviceTypeName,
+                capabilities = d.Capabilities,
+                source = "SmartThings",
+                manufacturer = "Samsung"
+            }));
+        }
+        catch (Exception ex)
         {
-            deviceId = d.Id,
-            name = d.Name,
-            label = d.Name,
-            deviceTypeName = d.Type,
-            capabilities = d.Status.Properties.Select(p => new { name = p.Key, value = p.Value.ToString() }).ToList(),
-            source = d.Source.ToString(),
-            manufacturer = d.Manufacturer,
-            roomName = d.RoomName,
-            lastSeen = d.LastSeen,
-            isOnline = d.Status.IsOnline
-        }));
-        
-        return Results.Json(allDevices);
-    }
-    catch (Exception)
-    {
-        return Results.Json(new List<object>());
-    }
-});
+            // Log SmartThings errors if needed
+            Console.WriteLine($"Error fetching SmartThings devices: {ex.Message}");
+        }
+        try
+        {
+            var appliancesJson = await homeConnectService.GetAppliancesAsync();
+            if (!string.IsNullOrEmpty(appliancesJson))
+            {
+                dynamic? appliancesObj = Newtonsoft.Json.JsonConvert.DeserializeObject(appliancesJson);
+                var appliances = appliancesObj?.data?.homeappliances;
+                if (appliances != null)
+                {
+                    foreach (var appliance in appliances)
+                    {
+                        allDevices.Add(new
+                        {
+                            deviceId = (string?)appliance.haId ?? "",
+                            name = (string?)appliance.name ?? "",
+                            label = (string?)appliance.brand ?? "",
+                            deviceTypeName = (string?)appliance.type ?? "",
+                            capabilities = new List<object>(), // Home Connect API: add if needed
+                            source = "HomeConnect",
+                            manufacturer = (string?)appliance.brand ?? "Home Connect"
+                        });
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log SmartThings errors if needed
+            Console.WriteLine($"Error fetching SmartThings devices: {ex.Message}");
+        }
 
-app.MapGet("/api/bosch/devices", async (BoschService boschService) =>
-{
-    try
-    {
-        var devices = await boschService.GetDevicesAsync();
-        return Results.Json(devices);
+        return Results.Json(allDevices);
     }
     catch (Exception)
     {
@@ -292,6 +305,70 @@ app.MapPost("/api/devices/{deviceId}/command", async (string deviceId, DeviceCom
     {
         return Results.Problem($"Error sending command: {ex.Message}");
     }
+});
+
+// Home Connect Authorization Code Flow Endpoints
+app.MapGet("/api/homeconnect/login", (HttpContext context, HomeConnectService homeConnectService) =>
+{
+    // Set your redirect URI (must match what is registered in Home Connect dev portal)
+    var redirectUri = "https://localhost:55272/api/homeconnect/callback";
+    var url = homeConnectService.GetAuthorizationUrl(redirectUri, "IdentifyAppliance ApplianceSettings" /* add scopes as needed */);
+    context.Response.Redirect(url);
+    return Task.CompletedTask;
+});
+
+app.MapGet("/api/homeconnect/callback", async (HttpContext context, HomeConnectService homeConnectService) =>
+{
+    var code = context.Request.Query["code"].ToString();
+    var error = context.Request.Query["error"].ToString();
+    if (!string.IsNullOrEmpty(error))
+    {
+        await context.Response.WriteAsync($"<h2>Authorization failed: {error}</h2>");
+        return;
+    }
+    if (string.IsNullOrEmpty(code))
+    {
+        await context.Response.WriteAsync("<h2>No authorization code received.</h2>");
+        return;
+    }
+    var redirectUri = "https://localhost:55272/api/homeconnect/callback";
+    var success = await homeConnectService.ExchangeAuthorizationCodeAsync(code, redirectUri);
+    if (success)
+        await context.Response.WriteAsync("<h2>Authorization successful! You may now use Home Connect features.</h2>");
+    else
+        await context.Response.WriteAsync("<h2>Failed to obtain access token.</h2>");
+});
+
+// SmartThings Authorization Code Flow Endpoints
+app.MapGet("/api/smartthings/login", (HttpContext context, SmartThingsService smartThingsService) =>
+{
+    // Set your redirect URI (must match what is registered in SmartThings dev portal)
+    var redirectUri = "localhost:55272/api/smartthings/callback";
+    var url = smartThingsService.GetAuthorizationUrl(redirectUri, "r:devices:*");
+    context.Response.Redirect(url);
+    return Task.CompletedTask;
+});
+
+app.MapGet("/api/smartthings/callback", async (HttpContext context, SmartThingsService smartThingsService) =>
+{
+    var code = context.Request.Query["code"].ToString();
+    var error = context.Request.Query["error"].ToString();
+    if (!string.IsNullOrEmpty(error))
+    {
+        await context.Response.WriteAsync($"<h2>Authorization failed: {error}</h2>");
+        return;
+    }
+    if (string.IsNullOrEmpty(code))
+    {
+        await context.Response.WriteAsync("<h2>No authorization code received.</h2>");
+        return;
+    }
+    var redirectUri = "https://localhost:55272/api/smartthings/callback";
+    var success = await smartThingsService.ExchangeAuthorizationCodeAsync(code, redirectUri);
+    if (success)
+        await context.Response.WriteAsync("<h2>SmartThings authorization successful! You may now use SmartThings features.</h2>");
+    else
+        await context.Response.WriteAsync("<h2>Failed to obtain SmartThings access token.</h2>");
 });
 
 app.Run();

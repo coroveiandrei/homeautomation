@@ -2,25 +2,71 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text;
+using Newtonsoft.Json;
 
 namespace HomeAutomation.Services;
 
 public class SmartThingsService
 {
     private readonly HttpClient _httpClient;
-    private readonly string _personalAccessToken;
+    private string? _accessToken;
+    private readonly string _clientId = "70b6cb9e-a787-4e30-8c90-d39abdb90333"; // TODO: Set from config/env
+    private readonly string _clientSecret = ""; // TODO: Set from config/env
     private const string BaseUrl = "https://api.smartthings.com/v1";
+    private const string AuthUrl = "https://api.smartthings.com/v1/oauth/authorize";
+    private const string TokenUrl = "https://api.smartthings.com/v1/oauth/token";
 
     public SmartThingsService(HttpClient httpClient)
     {
         _httpClient = httpClient;
-        _personalAccessToken = Environment.GetEnvironmentVariable("SMARTTHINGS_PERSONAL_ACCESS_TOKEN") 
-            ?? throw new InvalidOperationException("SMARTTHINGS_PERSONAL_ACCESS_TOKEN environment variable is required");
-        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _personalAccessToken);
+    }
+
+    public string GetAuthorizationUrl(string redirectUri, string scope = "r:devices:*")
+    {
+        var url = $"{AuthUrl}?response_type=code&client_id={_clientId}&scope={Uri.EscapeDataString(scope)}&redirect_uri={Uri.EscapeDataString(redirectUri)}";
+        return url;
+    }
+
+    public async Task<bool> ExchangeAuthorizationCodeAsync(string code, string redirectUri)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, TokenUrl)
+        {
+            Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["grant_type"] = "authorization_code",
+                ["client_id"] = _clientId,
+                ["client_secret"] = _clientSecret,
+                ["code"] = code,
+                ["redirect_uri"] = redirectUri
+            })
+        };
+        var response = await _httpClient.SendAsync(request);
+        var json = await response.Content.ReadAsStringAsync();
+        if (response.IsSuccessStatusCode)
+        {
+            dynamic? tokenResponse = JsonConvert.DeserializeObject(json);
+            string? accessToken = tokenResponse?.access_token;
+            if (!string.IsNullOrEmpty(accessToken))
+            {
+                await AuthenticateAsync(accessToken);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public async Task<bool> AuthenticateAsync(string accessToken)
+    {
+        _accessToken = accessToken;
+        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
+        return true;
     }
 
     public async Task<List<DeviceWithStatus>> GetDevicesWithStatusAsync()
     {
+        if (string.IsNullOrEmpty(_accessToken))
+            throw new InvalidOperationException("Not authenticated with SmartThings");
         var devices = await _httpClient.GetFromJsonAsync<DeviceList>($"{BaseUrl}/devices");
         var devicesWithStatus = new List<DeviceWithStatus>();
 
@@ -64,6 +110,8 @@ public class SmartThingsService
 
     public async Task<bool> SendCommandAsync(string deviceId, string capability, string command, List<object>? arguments = null)
     {
+        if (string.IsNullOrEmpty(_accessToken))
+            throw new InvalidOperationException("Not authenticated with SmartThings");
         var commandPayload = new CommandPayload
         {
             Commands = new List<DeviceCommand>

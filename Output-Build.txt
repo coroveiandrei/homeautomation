@@ -1,0 +1,9 @@
+﻿Build started at 6:41 PM...
+1>------ Build started: Project: homeautomation, Configuration: Debug Any CPU ------
+1>C:\personal\homeautomation\Services\HomeConnectService.cs(44,29,44,46): warning CS1998: This async method lacks 'await' operators and will run synchronously. Consider using the 'await' operator to await non-blocking API calls, or 'await Task.Run(...)' to do CPU-bound work on a background thread.
+1>C:\personal\homeautomation\Program.cs(17,31,17,43): error CS0246: The type or namespace name 'BoschService' could not be found (are you missing a using directive or an assembly reference?)
+1>C:\personal\homeautomation\Program.cs(216,74,216,86): error CS0246: The type or namespace name 'BoschService' could not be found (are you missing a using directive or an assembly reference?)
+1>C:\personal\homeautomation\Program.cs(259,41,259,53): error CS0246: The type or namespace name 'BoschService' could not be found (are you missing a using directive or an assembly reference?)
+1>Done building project "homeautomation.csproj" -- FAILED.
+========== Build: 0 succeeded, 1 failed, 0 up-to-date, 0 skipped ==========
+========== Build completed at 6:41 PM and took 00.887 seconds ==========
