@@ -283,28 +283,27 @@ app.MapGet("/", async (HttpContext context) =>
             try {
                 const response = await fetch('/api/devices');
                 const data = await response.json();
-                
                 console.log('API Response:', data); // Debug log
-                
                 // Ensure we have an array
                 const devices = Array.isArray(data) ? data : [];
-                
                 if (devices.length === 0) {
                     devicesDiv.innerHTML = '<div class="error">No devices found.</div>';
                     return;
                 }
-
                 devicesDiv.innerHTML = devices.map(device => {
                     let sourceClass = 'smartthings';
                     let manufacturerIcon = '🏠';
                     let extraInfo = '';
                     let statusInfo = '';
+                    let startBtn = '';
                     if (device.source?.toLowerCase() === 'homeconnect' || device.manufacturer?.toLowerCase() === 'bosch') {
                         sourceClass = 'bosch';
                         manufacturerIcon = '🍽️';
                         // Show dishwasher details for Home Connect
                         if (device.type?.toLowerCase() === 'dishwasher' || device.deviceTypeName?.toLowerCase() === 'dishwasher') {
                             extraInfo = `<div class='device-info'><b>Type:</b> Dishwasher<br><b>Brand:</b> ${device.brand || device.manufacturer || ''}<br><b>Model:</b> ${device.enumber || device.vib || ''}</div>`;
+                            // Add Start Dishwasher button
+                            startBtn = `<button class="smartthings-btn" onclick="startDishwasher('${device.deviceId}')">▶️ Start Dishwasher (Eco50)</button>`;
                         }
                         if (device.status) {
                             statusInfo = `<div class='device-info'><b>Status:</b> ${device.status}</div>`;
@@ -325,6 +324,7 @@ app.MapGet("/", async (HttpContext context) =>
                             ${device.lastSeen ? `<div class="device-info">Last seen: ${new Date(device.lastSeen).toLocaleString()}</div>` : ''}
                             ${extraInfo}
                             ${statusInfo}
+                            ${startBtn}
                             <div class="capabilities">
                                 ${device.capabilities && device.capabilities.length > 0 ? device.capabilities.map(cap => `
                                     <div class="capability">
@@ -336,6 +336,17 @@ app.MapGet("/", async (HttpContext context) =>
                         </div>
                     `;
                 }).join('');
+
+                // Add JS function for starting dishwasher and showing popup
+                window.startDishwasher = async function(haId) {
+                    try {
+                        const resp = await fetch(`/api/homeconnect/${haId}/start-eco50`, { method: 'POST' });
+                        const data = await resp.json();
+                        alert('Dishwasher Start Response:\n' + JSON.stringify(data, null, 2));
+                    } catch (err) {
+                        alert('Failed to start dishwasher: ' + err);
+                    }
+                }
             } catch (error) {
                 console.error('Error:', error); // Debug log
                 devicesDiv.innerHTML = `<div class="error">Error loading devices: ${error.message}</div>`;
@@ -464,16 +475,18 @@ app.MapGet("/api/solar/last30days", async (SolarmanService solarmanService) =>
     }
 });
 
-app.MapPost("/api/devices/{deviceId}/command", async (string deviceId, DeviceCommandRequest request, SmartThingsService smartThingsService) =>
+
+// Start Eco50 program for Home Connect dishwasher
+app.MapPost("/api/homeconnect/{haId}/start-eco50", async (string haId, HomeConnectService homeConnectService) =>
 {
     try
     {
-        var result = await smartThingsService.SendCommandAsync(deviceId, request.Capability, request.Command, request.Arguments);
-        return Results.Ok(new { success = result });
+        var success = await homeConnectService.StartProgramAsync(haId);
+        return Results.Json(new { success });
     }
     catch (Exception ex)
     {
-        return Results.Problem($"Error sending command: {ex.Message}");
+        return Results.Json(new { success = false, error = ex.Message });
     }
 });
 
@@ -504,23 +517,25 @@ app.MapGet("/api/homeconnect/callback", async (HttpContext context, HomeConnectS
     var redirectUri = "https://localhost:55272/api/homeconnect/callback";
     var success = await homeConnectService.ExchangeAuthorizationCodeAsync(code, redirectUri);
     if (success)
-        await context.Response.WriteAsync("<h2>Authorization successful! You may now use Home Connect features.</h2>");
+    {
+        context.Response.Redirect("/");
+    }
     else
+    {
         await context.Response.WriteAsync("<h2>Failed to obtain access token.</h2>");
+    }
 });
 
 
-app.MapGet("/api/solar/last24hours", async (SolarmanService solarmanService) =>
+// SmartThings Authorization Code Flow Endpoints
+app.MapGet("/api/smartthings/login", (HttpContext context, SmartThingsService smartThingsService) =>
 {
-    try
-    {
-        var data = await solarmanService.GetLast24HoursChartAsync();
-        return Results.Json(data);
-    }
-    catch (Exception)
-    {
-        return Results.Json(new { labels = new string[0], values = new double[0] });
-    }
+    // Set your redirect URI (must match what is registered in SmartThings dev portal)
+    var redirectUri = "https://c28fba2fcaf4.ngrok-free.app/api/smartthings/callback";
+    // var redirectUri = "localhost";
+    var url = smartThingsService.GetAuthorizationUrl(redirectUri, "r:devices:*");
+    context.Response.Redirect(url);
+    return Task.CompletedTask;
 });
 
 app.MapGet("/api/smartthings/callback", async (HttpContext context, SmartThingsService smartThingsService) =>
@@ -537,13 +552,27 @@ app.MapGet("/api/smartthings/callback", async (HttpContext context, SmartThingsS
         await context.Response.WriteAsync("<h2>No authorization code received.</h2>");
         return;
     }
-    var redirectUri = "https://85efd086bd29.ngrok-free.app/api/smartthings/callback";
+    var redirectUri = "https://c28fba2fcaf4.ngrok-free.app/api/smartthings/callback";
     var success = await smartThingsService.ExchangeAuthorizationCodeAsync(code, redirectUri);
     if (success)
         await context.Response.WriteAsync("<h2>SmartThings authorization successful! You may now use SmartThings features.</h2>");
     else
         await context.Response.WriteAsync("<h2>Failed to obtain SmartThings access token.</h2>");
 });
+
+app.MapGet("/api/solar/last24hours", async (SolarmanService solarmanService) =>
+{
+    try
+    {
+        var data = await solarmanService.GetLast24HoursChartAsync();
+        return Results.Json(data);
+    }
+    catch (Exception)
+    {
+        return Results.Json(new { labels = new string[0], values = new double[0] });
+    }
+});
+
 
 app.Run();
 

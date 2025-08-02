@@ -39,9 +39,17 @@ namespace HomeAutomation.Services
             return await resp.Content.ReadAsStringAsync();
         }
 
-        public async Task<bool> StartProgramAsync(string haid, string programJson)
+        public async Task<bool> StartProgramAsync(string haid, string programKey = "Dishcare.Dishwasher.Program.Eco50")
         {
             if (string.IsNullOrEmpty(_accessToken)) throw new InvalidOperationException("Not authenticated");
+            var payload = new
+            {
+                data = new
+                {
+                    key = programKey
+                }
+            };
+            var programJson = JsonConvert.SerializeObject(payload);
             var content = new StringContent(programJson, Encoding.UTF8, "application/vnd.bsh.sdk.v1+json");
             var resp = await _httpClient.PutAsync($"https://api.home-connect.com/api/homeappliances/{haid}/programs/active", content);
             return resp.IsSuccessStatusCode;
