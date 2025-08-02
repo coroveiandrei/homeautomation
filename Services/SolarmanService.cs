@@ -82,7 +82,7 @@ namespace HomeAutomation.Services
                 if (_accessToken == null)
                 {
                     // Return mock data if authentication failed
-                    return GenerateMockSolarData();
+                    return new SolarDataResponse();
                 }
 
                 // Use /station/v1.0/history endpoint for daily data
@@ -118,55 +118,8 @@ namespace HomeAutomation.Services
                 // Return mock data on any error
             }
 
-            return GenerateMockSolarData();
+            return new SolarDataResponse();
         }
-
-        public async Task<SolarDataResponse> GetLast24HoursHistoryAsync()
-        {
-            try
-            {
-                await EnsureAuthenticatedAsync();
-
-                if (_accessToken == null)
-                {
-                    // Return mock data if authentication failed
-                    return GenerateMockSolarData();
-                }
-
-                _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _accessToken);
-
-                var stationId = 63818743L; // TODO: Make configurable
-                var endTime = DateTime.UtcNow;
-                var startTime = endTime.AddHours(-24);
-                var historyBody = new
-                {
-                    stationId = stationId,
-                    timeType = 1, // 1 = hour granularity
-                    startTime = startTime.ToString("yyyy-MM-dd HH:00:00"),
-                    endTime = endTime.ToString("yyyy-MM-dd HH:00:00")
-                };
-                var historyRequest = new HttpRequestMessage(HttpMethod.Post, $"{SolarmanBaseUrl}/station/v1.0/history")
-                {
-                    Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(historyBody), Encoding.UTF8, "application/json")
-                };
-                var historyResponse = await _httpClient.SendAsync(historyRequest);
-                if (historyResponse.IsSuccessStatusCode)
-                {
-                    var historyData = await historyResponse.Content.ReadFromJsonAsync<SolarmanHistoryResponse>();
-                    if (historyData?.Success == true && historyData.StationDataItems?.Any() == true)
-                    {
-                        return ConvertToHourlyChartData(historyData);
-                    }
-                }
-            }
-            catch
-            {
-                // Return mock data on any error
-            }
-
-            return GenerateMockSolarData();
-        }
-
         private SolarDataResponse ConvertToChartData(SolarmanHistoryResponse response)
         {
             // Map SolarmanHistoryResponse to chart data (daily)
@@ -189,27 +142,28 @@ namespace HomeAutomation.Services
                     };
                 }
             }
-            return GenerateMockSolarData();
+            return new SolarDataResponse();
         }
 
         private SolarDataResponse ConvertToHourlyChartData(SolarmanHistoryResponse response)
         {
-            // Map SolarmanHistoryResponse to chart data for hourly data
+            // Map SolarmanHistoryResponse to chart data for hourly data (using generationPower and dateTime)
             if (response.StationDataItems != null)
             {
                 var labels = new List<string>();
                 var values = new List<double>();
                 foreach (var item in response.StationDataItems)
                 {
-                    string label = $"{item.year}-{item.month:D2}-{item.day:D2}";
-                    var hourProp = item.GetType().GetProperty("hour");
-                    if (hourProp != null)
+                    // Try to deserialize to SolarmanHourlyItem for type safety
+                    var json = System.Text.Json.JsonSerializer.Serialize(item);
+                    var hourItem = System.Text.Json.JsonSerializer.Deserialize<HomeAutomation.Models.SolarmanHourlyItem>(json);
+                    if (hourItem != null)
                     {
-                        int hour = (int)(hourProp.GetValue(item) ?? 0);
-                        label += $" {hour:D2}:00";
+                        // Convert Unix timestamp to local time string (HH:mm)
+                        var dateTime = DateTimeOffset.FromUnixTimeSeconds((long)hourItem.DateTimeUnix).ToLocalTime();
+                        labels.Add(dateTime.ToString("HH:mm"));
+                        values.Add(hourItem.GenerationPower ?? 0);
                     }
-                    labels.Add(label);
-                    values.Add(item.GenerationValue);
                 }
                 if (labels.Count > 0)
                 {
@@ -220,29 +174,7 @@ namespace HomeAutomation.Services
                     };
                 }
             }
-            return GenerateMockSolarData();
-        }
-
-        private SolarDataResponse GenerateMockSolarData()
-        {
-            var labels = new List<string>();
-            var values = new List<double>();
-            var random = new Random();
-
-            // Generate hourly data from 6 AM to 6 PM
-            for (int hour = 6; hour <= 18; hour++)
-            {
-                labels.Add($"{hour:D2}:00");
-                double baseProduction = Math.Sin((hour - 6) * Math.PI / 12) * 5; // Peak at noon
-                double randomVariation = (random.NextDouble() - 0.5) * 1; // ±0.5 kW variation
-                values.Add(Math.Max(0, baseProduction + randomVariation));
-            }
-
-            return new SolarDataResponse
-            {
-                Labels = labels.ToArray(),
-                Values = values.ToArray()
-            };
+            return new SolarDataResponse();
         }
 
         /// <summary>
@@ -257,20 +189,20 @@ namespace HomeAutomation.Services
                 if (_accessToken == null)
                 {
                     // Return mock data if authentication failed
-                    return GenerateMockSolarData();
+                    return new SolarDataResponse();
                 }
 
                 _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _accessToken);
 
                 var stationId = 63818743L; // TODO: Make configurable
-                var endTime = DateTime.UtcNow;
+                var endTime = DateTime.UtcNow.AddDays(+1);
                 var startTime = endTime.AddHours(-24);
                 var historyBody = new
                 {
                     stationId = stationId,
                     timeType = 1, // 1 = hour granularity
-                    startTime = startTime.ToString("yyyy-MM-dd HH:00:00"),
-                    endTime = endTime.ToString("yyyy-MM-dd HH:00:00")
+                    startTime = startTime.ToString("yyyy-MM-dd"),
+                    endTime = endTime.ToString("yyyy-MM-dd")
                 };
                 var historyRequest = new HttpRequestMessage(HttpMethod.Post, $"{SolarmanBaseUrl}/station/v1.0/history")
                 {
@@ -279,10 +211,22 @@ namespace HomeAutomation.Services
                 var historyResponse = await _httpClient.SendAsync(historyRequest);
                 if (historyResponse.IsSuccessStatusCode)
                 {
-                    var historyData = await historyResponse.Content.ReadFromJsonAsync<SolarmanHistoryResponse>();
+                    var historyData = await historyResponse.Content.ReadFromJsonAsync<HomeAutomation.Models.Solarman24HourResponse>();
                     if (historyData?.Success == true && historyData.StationDataItems?.Any() == true)
                     {
-                        return ConvertToHourlyChartData(historyData);
+                        var labels = new List<string>();
+                        var values = new List<double>();
+                        foreach (var hourItem in historyData.StationDataItems)
+                        {
+                            var dateTime = DateTimeOffset.FromUnixTimeSeconds((long)hourItem.DateTimeUnix).ToLocalTime();
+                            labels.Add(dateTime.ToString("HH:mm"));
+                            values.Add(hourItem.GenerationPower ?? 0);
+                        }
+                        return new SolarDataResponse
+                        {
+                            Labels = labels.ToArray(),
+                            Values = values.ToArray()
+                        };
                     }
                 }
             }
@@ -291,7 +235,7 @@ namespace HomeAutomation.Services
                 // Return mock data on any error
             }
 
-            return GenerateMockSolarData();
+            return new SolarDataResponse();
         }
     }
 }
