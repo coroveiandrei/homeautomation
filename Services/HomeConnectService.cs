@@ -3,84 +3,134 @@ using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 
-namespace HomeAutomation.Services;
-
-public class HomeConnectService
+namespace HomeAutomation.Services
 {
-    private readonly HttpClient _httpClient;
-    private string? _accessToken;
-    private const string DeviceCodeEndpoint = "https://api.home-connect.com/security/oauth/device_authorization";
-    private const string TokenEndpoint = "https://api.home-connect.com/security/oauth/token";
-    private readonly string clientId;
-    private readonly string clientSecret;
-
-    /// <summary>
-    /// Requires environment variables: HOMECONNECT_CLIENT_ID and HOMECONNECT_CLIENT_SECRET
-    /// </summary>
-    public HomeConnectService(HttpClient httpClient)
+    public class HomeConnectService
     {
-        _httpClient = httpClient;
-        clientId = Environment.GetEnvironmentVariable("HOMECONNECT_CLIENT_ID") ?? throw new InvalidOperationException("HOMECONNECT_CLIENT_ID env variable not set");
-        clientSecret = Environment.GetEnvironmentVariable("HOMECONNECT_CLIENT_SECRET") ?? throw new InvalidOperationException("HOMECONNECT_CLIENT_SECRET env variable not set");
-    }
+        private readonly HttpClient _httpClient;
+        private string? _accessToken;
+        private const string DeviceCodeEndpoint = "https://api.home-connect.com/security/oauth/device_authorization";
+        private const string TokenEndpoint = "https://api.home-connect.com/security/oauth/token";
+        private readonly string clientId;
+        private readonly string clientSecret;
 
-    public async Task<bool> AuthenticateAsync(string accessToken)
-    {
-        _accessToken = accessToken;
-        _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _accessToken);
-        return true;
-    }
-
-    public async Task<dynamic?> GetAppliancesAsync()
-    {
-        if (string.IsNullOrEmpty(_accessToken)) throw new InvalidOperationException("Not authenticated");
-        var resp = await _httpClient.GetAsync("https://api.home-connect.com/api/homeappliances");
-        resp.EnsureSuccessStatusCode();
-        return await resp.Content.ReadAsStringAsync();
-    }
-
-    public async Task<bool> StartProgramAsync(string haid, string programJson)
-    {
-        if (string.IsNullOrEmpty(_accessToken)) throw new InvalidOperationException("Not authenticated");
-        var content = new StringContent(programJson, Encoding.UTF8, "application/vnd.bsh.sdk.v1+json");
-        var resp = await _httpClient.PutAsync($"https://api.home-connect.com/api/homeappliances/{haid}/programs/active", content);
-        return resp.IsSuccessStatusCode;
-    }
-
-    // Generates the Home Connect authorization URL for the user to log in
-    public string GetAuthorizationUrl(string redirectUri, string scope = "IdentifyAppliance")
-    {
-        var url = $"https://api.home-connect.com/security/oauth/authorize?response_type=code&client_id={clientId}&redirect_uri={Uri.EscapeDataString(redirectUri)}";
-        return url;
-    }
-
-    // Exchanges the authorization code for an access token
-    public async Task<bool> ExchangeAuthorizationCodeAsync(string code, string redirectUri)
-    {
-        var request = new HttpRequestMessage(HttpMethod.Post, TokenEndpoint)
+        /// <summary>
+        /// Requires environment variables: HOMECONNECT_CLIENT_ID and HOMECONNECT_CLIENT_SECRET
+        /// </summary>
+        public HomeConnectService(HttpClient httpClient)
         {
-            Content = new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                ["grant_type"] = "authorization_code",
-                ["code"] = code,
-                ["redirect_uri"] = redirectUri,
-                ["client_id"] = clientId,
-                ["client_secret"] = clientSecret
-            })
-        };
-        var response = await _httpClient.SendAsync(request);
-        var json = await response.Content.ReadAsStringAsync();
-        if (response.IsSuccessStatusCode)
-        {
-            dynamic? tokenResponse = JsonConvert.DeserializeObject(json);
-            string? accessToken = tokenResponse?.access_token;
-            if (!string.IsNullOrEmpty(accessToken))
-            {
-                await AuthenticateAsync(accessToken);
-                return true;
-            }
+            _httpClient = httpClient;
+            clientId = Environment.GetEnvironmentVariable("HOMECONNECT_CLIENT_ID") ?? throw new InvalidOperationException("HOMECONNECT_CLIENT_ID env variable not set");
+            clientSecret = Environment.GetEnvironmentVariable("HOMECONNECT_CLIENT_SECRET") ?? throw new InvalidOperationException("HOMECONNECT_CLIENT_SECRET env variable not set");
         }
-        return false;
+
+        public async Task<bool> AuthenticateAsync(string accessToken)
+        {
+            _accessToken = accessToken;
+            _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _accessToken);
+            return true;
+        }
+
+        public async Task<dynamic?> GetAppliancesAsync()
+        {
+            if (string.IsNullOrEmpty(_accessToken)) throw new InvalidOperationException("Not authenticated");
+            var resp = await _httpClient.GetAsync("https://api.home-connect.com/api/homeappliances");
+            resp.EnsureSuccessStatusCode();
+            return await resp.Content.ReadAsStringAsync();
+        }
+
+        public async Task<bool> StartProgramAsync(string haid, string programJson)
+        {
+            if (string.IsNullOrEmpty(_accessToken)) throw new InvalidOperationException("Not authenticated");
+            var content = new StringContent(programJson, Encoding.UTF8, "application/vnd.bsh.sdk.v1+json");
+            var resp = await _httpClient.PutAsync($"https://api.home-connect.com/api/homeappliances/{haid}/programs/active", content);
+            return resp.IsSuccessStatusCode;
+        }
+
+        // Generates the Home Connect authorization URL for the user to log in
+        public string GetAuthorizationUrl(string redirectUri, string scope = "IdentifyAppliance")
+        {
+            var url = $"https://api.home-connect.com/security/oauth/authorize?response_type=code&client_id={clientId}&redirect_uri={Uri.EscapeDataString(redirectUri)}";
+            return url;
+        }
+
+        // Exchanges the authorization code for an access token
+        public async Task<bool> ExchangeAuthorizationCodeAsync(string code, string redirectUri)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, TokenEndpoint)
+            {
+                Content = new FormUrlEncodedContent(new Dictionary<string, string>
+                {
+                    ["grant_type"] = "authorization_code",
+                    ["code"] = code,
+                    ["redirect_uri"] = redirectUri,
+                    ["client_id"] = clientId,
+                    ["client_secret"] = clientSecret
+                })
+            };
+            var response = await _httpClient.SendAsync(request);
+            var json = await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode)
+            {
+                dynamic? tokenResponse = JsonConvert.DeserializeObject(json);
+                string? accessToken = tokenResponse?.access_token;
+                if (!string.IsNullOrEmpty(accessToken))
+                {
+                    await AuthenticateAsync(accessToken);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Gets the status of a home appliance by haId
+        public async Task<string?> GetApplianceStatusAsync(string haId)
+        {
+            if (string.IsNullOrEmpty(_accessToken)) throw new InvalidOperationException("Not authenticated");
+            var resp = await _httpClient.GetAsync($"https://api.home-connect.com/api/homeappliances/{haId}/status");
+            if (!resp.IsSuccessStatusCode)
+                return null;
+            var json = await resp.Content.ReadAsStringAsync();
+            dynamic? statusObj = JsonConvert.DeserializeObject(json);
+            if (statusObj?.data?.status != null)
+            {
+                var statusList = new List<string>();
+                foreach (var s in statusObj.data.status)
+                {
+                    string key = s.key?.ToString() ?? "";
+                    string value = s.value?.ToString() ?? "";
+                    // Make value more readable for known enums
+                    if (key.Contains("OperationState"))
+                    {
+                        value = value.Replace("BSH.Common.EnumType.OperationState.", "");
+                    }
+                    if (key.Contains("DoorState"))
+                    {
+                        value = value.Replace("BSH.Common.EnumType.DoorState.", "");
+                    }
+                    // Shorten boolean keys
+                    if (key.Contains("RemoteControlStartAllowed"))
+                    {
+                        key = "Remote Start Allowed";
+                    }
+                    else if (key.Contains("RemoteControlActive"))
+                    {
+                        key = "Remote Control Active";
+                    }
+                    else if (key.Contains("DoorState"))
+                    {
+                        key = "Door State";
+                    }
+                    else if (key.Contains("OperationState"))
+                    {
+                        key = "Operation State";
+                    }
+                    statusList.Add($"{key}: {value}");
+                }
+                return string.Join(", ", statusList);
+            }
+            return null;
+        }
     }
 }
 

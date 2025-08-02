@@ -68,7 +68,7 @@ app.MapGet("/", async (HttpContext context) =>
         .chart-container { position: relative; height: 400px; margin-top: 20px; }
         .smartthings-btn { background: #1976D2; color: white; border: none; padding: 12px 24px; border-radius: 25px; cursor: pointer; font-size: 1em; margin-left: 10px; text-decoration: none; transition: background 0.3s; }
         .smartthings-btn:hover { background: #0d47a1; }
-        .homeconnect-btn:hover { background: #d84315; }
+        /* .homeconnect-btn style removed; use .smartthings-btn for both buttons */
     </style>
 </head>
 <body>
@@ -76,7 +76,7 @@ app.MapGet("/", async (HttpContext context) =>
         <div class="header">
             <h1>🏠 Smart Home Automation</h1>
             <button class="refresh-btn" onclick="loadDevices()">🔄 Refresh Devices</button>
-            <a href="/api/homeconnect/login" class="homeconnect-btn">🔑 Login with Home Connect</a>
+            <a href="/api/homeconnect/login" class="smartthings-btn">🔑 Connect to Home Connect</a>
             <a href="/api/smartthings/login" class="smartthings-btn">🔑 Connect to SmartThings</a>
         </div>
         <div class="content">
@@ -295,10 +295,23 @@ app.MapGet("/", async (HttpContext context) =>
                 }
 
                 devicesDiv.innerHTML = devices.map(device => {
-                    const sourceClass = device.source?.toLowerCase() === 'bosch' ? 'bosch' : 'smartthings';
-                    const sourceIcon = device.source?.toLowerCase() === 'bosch' ? '🔧' : '📱';
-                    const manufacturerIcon = device.manufacturer === 'Bosch' ? '🔧' : device.manufacturer === 'Samsung' ? '📱' : '🏠';
-                    
+                    let sourceClass = 'smartthings';
+                    let manufacturerIcon = '🏠';
+                    let extraInfo = '';
+                    let statusInfo = '';
+                    if (device.source?.toLowerCase() === 'homeconnect' || device.manufacturer?.toLowerCase() === 'bosch') {
+                        sourceClass = 'bosch';
+                        manufacturerIcon = '🍽️';
+                        // Show dishwasher details for Home Connect
+                        if (device.type?.toLowerCase() === 'dishwasher' || device.deviceTypeName?.toLowerCase() === 'dishwasher') {
+                            extraInfo = `<div class='device-info'><b>Type:</b> Dishwasher<br><b>Brand:</b> ${device.brand || device.manufacturer || ''}<br><b>Model:</b> ${device.enumber || device.vib || ''}</div>`;
+                        }
+                        if (device.status) {
+                            statusInfo = `<div class='device-info'><b>Status:</b> ${device.status}</div>`;
+                        }
+                    } else if (device.manufacturer === 'Samsung') {
+                        manufacturerIcon = '📱';
+                    }
                     return `
                         <div class="device ${sourceClass}">
                             <div class="device-header">
@@ -310,13 +323,15 @@ app.MapGet("/", async (HttpContext context) =>
                                 ${device.isOnline ? '🟢 Online' : '🔴 Offline'}
                             </div>` : ''}
                             ${device.lastSeen ? `<div class="device-info">Last seen: ${new Date(device.lastSeen).toLocaleString()}</div>` : ''}
+                            ${extraInfo}
+                            ${statusInfo}
                             <div class="capabilities">
                                 ${device.capabilities && device.capabilities.length > 0 ? device.capabilities.map(cap => `
                                     <div class="capability">
                                         <span class="capability-name">${cap.name}</span>
                                         <span class="capability-value">${cap.value}</span>
                                     </div>
-                                `).join('') : '<div class="capability"><span class="capability-name">No capabilities available</span></div>'}
+                                `).join('') : (device.status ? '' : '<div class="capability"><span class="capability-name">No capabilities available</span></div>')}
                             </div>
                         </div>
                     `;
@@ -363,7 +378,8 @@ app.MapGet("/api/devices", async (SmartThingsService smartThingsService, HomeCon
                 deviceTypeName = d.DeviceTypeName,
                 capabilities = d.Capabilities,
                 source = "SmartThings",
-                manufacturer = "Samsung"
+                manufacturer = "Samsung",
+                status = ""
             }));
         }
         catch (Exception ex)
@@ -382,15 +398,28 @@ app.MapGet("/api/devices", async (SmartThingsService smartThingsService, HomeCon
                 {
                     foreach (var appliance in appliances)
                     {
+                        string name = (string?)appliance.name ?? "";
+                        string haId = (string?)appliance.haId ?? "";
+                        string status = "";
+                        try
+                        {
+                            status = await homeConnectService.GetApplianceStatusAsync(haId) ?? "";
+                        }
+                        catch (Exception ex)
+                        {
+                            status = "";
+                            Console.WriteLine($"Error fetching status for {haId}: {ex.Message}");
+                        }
                         allDevices.Add(new
                         {
-                            deviceId = (string?)appliance.haId ?? "",
-                            name = (string?)appliance.name ?? "",
-                            label = (string?)appliance.brand ?? "",
+                            deviceId = haId,
+                            name = name,
+                            label = name,
                             deviceTypeName = (string?)appliance.type ?? "",
-                            capabilities = new List<object>(), // Home Connect API: add if needed
+                            capabilities = new List<object>(),
                             source = "HomeConnect",
-                            manufacturer = (string?)appliance.brand ?? "Home Connect"
+                            manufacturer = (string?)appliance.brand ?? "Home Connect",
+                            status = status
                         });
                     }
                 }
@@ -398,8 +427,7 @@ app.MapGet("/api/devices", async (SmartThingsService smartThingsService, HomeCon
         }
         catch (Exception ex)
         {
-            // Log SmartThings errors if needed
-            Console.WriteLine($"Error fetching SmartThings devices: {ex.Message}");
+            Console.WriteLine($"Error fetching Home Connect devices: {ex.Message}");
         }
 
         return Results.Json(allDevices);
