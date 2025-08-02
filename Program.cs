@@ -115,15 +115,38 @@ app.MapGet("/", async (HttpContext context) =>
                     type: 'line',
                     data: {
                         labels: data.labels,
-                        datasets: [{
-                            label: 'Solar Production (kW)',
-                            data: data.values,
-                            borderColor: '#FFA726',
-                            backgroundColor: 'rgba(255, 167, 38, 0.1)',
-                            borderWidth: 2,
-                            fill: true,
-                            tension: 0.4
-                        }]
+                        datasets: [
+                            {
+                                label: 'Solar Production (kW)',
+                                data: data.values,
+                                borderColor: '#FFA726',
+                                backgroundColor: 'rgba(255, 167, 38, 0.1)',
+                                borderWidth: 2,
+                                fill: true,
+                                tension: 0.4,
+                                yAxisID: 'y',
+                            },
+                            {
+                                label: 'Battery SOC (%)',
+                                data: data.batterySoc,
+                                borderColor: '#42A5F5',
+                                backgroundColor: 'rgba(66, 165, 245, 0.1)',
+                                borderWidth: 2,
+                                fill: false,
+                                tension: 0.4,
+                                yAxisID: 'y2',
+                            },
+                            {
+                                label: 'Used Power (W)',
+                                data: data.usePower,
+                                borderColor: '#66BB6A',
+                                backgroundColor: 'rgba(102, 187, 106, 0.1)',
+                                borderWidth: 2,
+                                fill: false,
+                                tension: 0.4,
+                                yAxisID: 'y3',
+                            }
+                        ]
                     },
                     options: {
                         responsive: true,
@@ -134,7 +157,27 @@ app.MapGet("/", async (HttpContext context) =>
                                 title: {
                                     display: true,
                                     text: 'Power (kW)'
-                                }
+                                },
+                                position: 'left',
+                            },
+                            y2: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Battery SOC (%)'
+                                },
+                                position: 'right',
+                                grid: { drawOnChartArea: false },
+                            },
+                            y3: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Used Power (W)'
+                                },
+                                position: 'right',
+                                grid: { drawOnChartArea: false },
+                                offset: true,
                             },
                             x: {
                                 title: {
@@ -171,15 +214,35 @@ app.MapGet("/", async (HttpContext context) =>
                     type: 'line',
                     data: {
                         labels: data.labels,
-                        datasets: [{
-                            label: 'Solar Production (kW, Last 30 Days)',
-                            data: data.values,
-                            borderColor: '#42A5F5',
-                            backgroundColor: 'rgba(66, 165, 245, 0.1)',
-                            borderWidth: 2,
-                            fill: true,
-                            tension: 0.4
-                        }]
+                        datasets: [
+                            {
+                                label: 'Solar Production (kW, Last 30 Days)',
+                                data: data.values,
+                                borderColor: '#42A5F5',
+                                backgroundColor: 'rgba(66, 165, 245, 0.1)',
+                                borderWidth: 2,
+                                fill: true,
+                                tension: 0.4
+                            },
+                            {
+                                label: 'Self Consumed (kW, Last 30 Days)',
+                                data: data.selfConsumed,
+                                borderColor: '#FFA726',
+                                backgroundColor: 'rgba(255, 167, 38, 0.1)',
+                                borderWidth: 2,
+                                fill: false,
+                                tension: 0.4
+                            },
+                            {
+                                label: 'Exported to Grid (kW, Last 30 Days)',
+                                data: data.exportedToGrid,
+                                borderColor: '#66BB6A',
+                                backgroundColor: 'rgba(102, 187, 106, 0.1)',
+                                borderWidth: 2,
+                                fill: false,
+                                tension: 0.4
+                            }
+                        ]
                     },
                     options: {
                         responsive: true,

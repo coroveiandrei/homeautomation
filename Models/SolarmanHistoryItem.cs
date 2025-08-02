@@ -7,6 +7,15 @@ namespace HomeAutomation.Models
         [JsonPropertyName("generationValue")]
         public double GenerationValue { get; set; }
 
+        [JsonPropertyName("useValue")]
+        public double UseValue { get; set; }
+
+        [JsonPropertyName("gridValue")]
+        public double GridValue { get; set; }
+
+        [JsonPropertyName("chargeValue")]
+        public double ChargeValue { get; set; }
+
         [JsonPropertyName("year")]
         public int year { get; set; }
 

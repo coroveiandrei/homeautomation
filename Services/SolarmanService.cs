@@ -127,18 +127,24 @@ namespace HomeAutomation.Services
             {
                 var labels = new List<string>();
                 var values = new List<double>();
+                var selfConsumed = new List<double>();
+                var exportedToGrid = new List<double>();
                 foreach (var item in response.StationDataItems)
                 {
-                    // Use day/month/year for label
                     labels.Add($"{item.year}-{item.month:D2}-{item.day:D2}");
                     values.Add(item.GenerationValue);
+                    // Use direct properties for correct deserialization
+                    selfConsumed.Add(item.UseValue + item.ChargeValue);
+                    exportedToGrid.Add(item.GridValue);
                 }
                 if (labels.Count > 0)
                 {
                     return new SolarDataResponse
                     {
                         Labels = labels.ToArray(),
-                        Values = values.ToArray()
+                        Values = values.ToArray(),
+                        SelfConsumed = selfConsumed.ToArray(),
+                        ExportedToGrid = exportedToGrid.ToArray()
                     };
                 }
             }
@@ -216,16 +222,22 @@ namespace HomeAutomation.Services
                     {
                         var labels = new List<string>();
                         var values = new List<double>();
+                        var batterySoc = new List<double>();
+                        var usePower = new List<double>();
                         foreach (var hourItem in historyData.StationDataItems)
                         {
                             var dateTime = DateTimeOffset.FromUnixTimeSeconds((long)hourItem.DateTimeUnix).ToLocalTime();
                             labels.Add(dateTime.ToString("HH:mm"));
                             values.Add(hourItem.GenerationPower ?? 0);
+                            batterySoc.Add(hourItem.BatterySoc ?? 0);
+                            usePower.Add(hourItem.UsePower ?? 0);
                         }
                         return new SolarDataResponse
                         {
                             Labels = labels.ToArray(),
-                            Values = values.ToArray()
+                            Values = values.ToArray(),
+                            BatterySoc = batterySoc.ToArray(),
+                            UsePower = usePower.ToArray()
                         };
                     }
                 }

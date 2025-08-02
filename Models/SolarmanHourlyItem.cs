@@ -18,5 +18,11 @@ namespace HomeAutomation.Models
 
         [JsonPropertyName("day")]
         public int Day { get; set; }
+
+        [JsonPropertyName("batterySoc")]
+        public double? BatterySoc { get; set; }
+
+        [JsonPropertyName("usePower")]
+        public double? UsePower { get; set; }
     }
 }
