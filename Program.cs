@@ -86,22 +86,30 @@ app.MapGet("/", async (HttpContext context) =>
                     <canvas id="solarChart"></canvas>
                 </div>
             </div>
+            <div class="solar-section">
+                <h2>📈 Solar Production last 30 days</h2>
+                <div class="chart-container">
+                    <canvas id="solar30DaysChart"></canvas>
+                </div>
+            </div>
             <div id="devices" class="loading">Loading devices...</div>
         </div>
     </div>
 
     <script>
         let solarChart;
-        
+        let solar24hChart;
+        let solar30DaysChart;
+
         async function loadSolarData() {
             try {
                 const response = await fetch('/api/solar/today');
                 const data = await response.json();
-                
+
                 if (solarChart) {
                     solarChart.destroy();
                 }
-                
+
                 const ctx = document.getElementById('solarChart').getContext('2d');
                 solarChart = new Chart(ctx, {
                     type: 'line',
@@ -148,7 +156,63 @@ app.MapGet("/", async (HttpContext context) =>
                 document.getElementById('solarChart').innerHTML = '<div class="error">Error loading solar data</div>';
             }
         }
-        
+
+        async function loadSolar30DaysData() {
+            try {
+                const response = await fetch('/api/solar/last30days');
+                const data = await response.json();
+
+                if (solar30DaysChart) {
+                    solar30DaysChart.destroy();
+                }
+
+                const ctx = document.getElementById('solar30DaysChart').getContext('2d');
+                solar30DaysChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.labels,
+                        datasets: [{
+                            label: 'Solar Production (kW, Last 30 Days)',
+                            data: data.values,
+                            borderColor: '#42A5F5',
+                            backgroundColor: 'rgba(66, 165, 245, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Power (kW)'
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Hour'
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top'
+                            }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Error loading 30 days solar data:', error);
+                document.getElementById('solar30DaysChart').innerHTML = '<div class="error">Error loading 30 days solar data</div>';
+            }
+        }
+
         async function loadDevices() {
             const devicesDiv = document.getElementById('devices');
             devicesDiv.innerHTML = '<div class="loading">Loading devices...</div>';
@@ -202,11 +266,13 @@ app.MapGet("/", async (HttpContext context) =>
         
         // Load data when page loads
         loadSolarData();
-        loadDevices();
-        
+        loadSolar30DaysData();
+        loadDevices();  
+
         // Auto-refresh every 30 seconds
         setInterval(() => {
             loadSolarData();
+            loadSolar30DaysData();
             loadDevices();
         }, 30000);
     </script>
@@ -285,7 +351,20 @@ app.MapGet("/api/solar/today", async (SolarmanService solarmanService) =>
 {
     try
     {
-        var data = await solarmanService.GetTodayProductionAsync();
+        var data = await solarmanService.GetLast24HoursChartAsync();
+        return Results.Json(data);
+    }
+    catch (Exception)
+    {
+        return Results.Json(new { labels = new string[0], values = new double[0] });
+    }
+});
+
+app.MapGet("/api/solar/last30days", async (SolarmanService solarmanService) =>
+{
+    try
+    {
+        var data = await solarmanService.GetLast30DaysChartAsync();
         return Results.Json(data);
     }
     catch (Exception)
@@ -339,15 +418,18 @@ app.MapGet("/api/homeconnect/callback", async (HttpContext context, HomeConnectS
         await context.Response.WriteAsync("<h2>Failed to obtain access token.</h2>");
 });
 
-// SmartThings Authorization Code Flow Endpoints
-app.MapGet("/api/smartthings/login", (HttpContext context, SmartThingsService smartThingsService) =>
+
+app.MapGet("/api/solar/last24hours", async (SolarmanService solarmanService) =>
 {
-    // Set your redirect URI (must match what is registered in SmartThings dev portal)
-    var redirectUri = "https://85efd086bd29.ngrok-free.app/api/smartthings/callback";
-    // var redirectUri = "localhost";
-    var url = smartThingsService.GetAuthorizationUrl(redirectUri, "r:devices:*");
-    context.Response.Redirect(url);
-    return Task.CompletedTask;
+    try
+    {
+        var data = await solarmanService.GetLast24HoursChartAsync();
+        return Results.Json(data);
+    }
+    catch (Exception)
+    {
+        return Results.Json(new { labels = new string[0], values = new double[0] });
+    }
 });
 
 app.MapGet("/api/smartthings/callback", async (HttpContext context, SmartThingsService smartThingsService) =>
