@@ -23,6 +23,43 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
 }
+// Start SmartThings washing machine
+app.MapPost("/api/smartthings/{deviceId}/start-washer", async (string deviceId, SmartThingsService smartThingsService) =>
+{
+    try
+    {
+        // SmartThings washer start command (Samsung specific)
+        var success = await smartThingsService.SendCommandAsync(deviceId, "samsungce.washerOperatingState", "start", null);
+        if (success)
+        {
+            Console.WriteLine($"SmartThings washing machine {deviceId} start command sent successfully.");
+        }
+        return Results.Json(new { success });
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new { success = false, error = ex.Message });
+    }
+});
+
+// Start Samsung dryer
+app.MapPost("/api/smartthings/{deviceId}/start-dryer", async (string deviceId, SmartThingsService smartThingsService) =>
+{
+    try
+    {
+        // SmartThings dryer start command (Samsung specific)
+        var success = await smartThingsService.SendCommandAsync(deviceId, "samsungce.dryerOperatingState", "start", null);
+        if (success)
+        {
+            Console.WriteLine($"SmartThings dryer {deviceId} start command sent successfully.");
+        }
+        return Results.Json(new { success });
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new { success = false, error = ex.Message });
+    }
+});
 
 app.UseStaticFiles();
 app.UseRouting();
@@ -296,6 +333,7 @@ app.MapGet("/", async (HttpContext context) =>
                     let extraInfo = '';
                     let statusInfo = '';
                     let startBtn = '';
+
                     if (device.source?.toLowerCase() === 'homeconnect' || device.manufacturer?.toLowerCase() === 'bosch') {
                         sourceClass = 'bosch';
                         manufacturerIcon = '🍽️';
@@ -305,12 +343,26 @@ app.MapGet("/", async (HttpContext context) =>
                             // Add Start Dishwasher button
                             startBtn = `<button class="smartthings-btn" onclick="startDishwasher('${device.deviceId}')">▶️ Start Dishwasher (Eco50)</button>`;
                         }
+                        
                         if (device.status) {
                             statusInfo = `<div class='device-info'><b>Status:</b> ${device.status}</div>`;
                         }
-                    } else if (device.manufacturer === 'Samsung') {
+                    } else if (device.manufacturer?.toLowerCase() === 'samsung') {
                         manufacturerIcon = '📱';
-                    }
+                        const typeName = device.deviceTypeName?.toLowerCase() || '';
+                        // Show washing machine details for SmartThings
+                        if (typeName.includes('washer') || typeName.includes('washing')) {
+                            extraInfo += `<div class='device-info'><b>Type:</b> Washing Machine<br><b>Brand:</b> Samsung</div>`;
+                            // Add Start Washing Machine button
+                            startBtn += `<button class="smartthings-btn" onclick="startWashingMachine('${device.deviceId}')">▶️ Start Washing Machine</button>`;
+                        }
+                        // Show dryer details for SmartThings (case-insensitive and robust)
+                        if (typeName.includes('dryer')) {
+                            extraInfo += `<div class='device-info'><b>Type:</b> Dryer<br><b>Brand:</b> Samsung</div>`;
+                            // Add Start Dryer button
+                            startBtn += `<button class="smartthings-btn" onclick="startDryer('${device.deviceId}')">▶️ Start Dryer</button>`;
+                        }
+        }
                     return `
                         <div class="device ${sourceClass}">
                             <div class="device-header">
@@ -336,22 +388,44 @@ app.MapGet("/", async (HttpContext context) =>
                         </div>
                     `;
                 }).join('');
-
-                // Add JS function for starting dishwasher and showing popup
-                window.startDishwasher = async function(haId) {
-                    try {
-                        const resp = await fetch(`/api/homeconnect/${haId}/start-eco50`, { method: 'POST' });
-                        const data = await resp.json();
-                        alert('Dishwasher Start Response:\n' + JSON.stringify(data, null, 2));
-                    } catch (err) {
-                        alert('Failed to start dishwasher: ' + err);
-                    }
-                }
             } catch (error) {
                 console.error('Error:', error); // Debug log
                 devicesDiv.innerHTML = `<div class="error">Error loading devices: ${error.message}</div>`;
             }
         }
+
+        // Add JS function for starting dishwasher and showing popup (global scope)
+        window.startDishwasher = async function(haId) {
+            try {
+                const resp = await fetch(`/api/homeconnect/${haId}/start-eco50`, { method: 'POST' });
+                const data = await resp.json();
+                alert('Dishwasher Start Response:\n' + JSON.stringify(data, null, 2));
+            } catch (err) {
+                alert('Failed to start dishwasher: ' + err);
+            }
+        };
+
+        // Add JS function for starting washing machine and showing popup (global scope)
+        window.startWashingMachine = async function(deviceId) {
+            try {
+                const resp = await fetch(`/api/smartthings/${deviceId}/start-washer`, { method: 'POST' });
+                const data = await resp.json();
+                alert('Washing Machine Start Response:\n' + JSON.stringify(data, null, 2));
+            } catch (err) {
+                alert('Failed to start washing machine: ' + err);
+            }
+        };
+
+        // Add JS function for starting dryer and showing popup (global scope)
+        window.startDryer = async function(deviceId) {
+            try {
+                const resp = await fetch(`/api/smartthings/${deviceId}/start-dryer`, { method: 'POST' });
+                const data = await resp.json();
+                alert('Dryer Start Response:\n' + JSON.stringify(data, null, 2));
+            } catch (err) {
+                alert('Failed to start dryer: ' + err);
+            }
+        };
         
         // Load data when page loads
         loadSolarData();
@@ -493,8 +567,8 @@ app.MapPost("/api/homeconnect/{haId}/start-eco50", async (string haId, HomeConne
 // Home Connect Authorization Code Flow Endpoints
 app.MapGet("/api/homeconnect/login", (HttpContext context, HomeConnectService homeConnectService) =>
 {
-    // Set your redirect URI (must match what is registered in Home Connect dev portal)
-    var redirectUri = "https://localhost:55272/api/homeconnect/callback";
+    // Get redirect URI from environment variables (must match what is registered in Home Connect dev portal)
+    var redirectUri = Environment.GetEnvironmentVariable("HOME_CONNECT_REDIRECT_URI") ?? "https://localhost:55272/api/homeconnect/callback";
     var url = homeConnectService.GetAuthorizationUrl(redirectUri, "IdentifyAppliance ApplianceSettings" /* add scopes as needed */);
     context.Response.Redirect(url);
     return Task.CompletedTask;
@@ -514,7 +588,7 @@ app.MapGet("/api/homeconnect/callback", async (HttpContext context, HomeConnectS
         await context.Response.WriteAsync("<h2>No authorization code received.</h2>");
         return;
     }
-    var redirectUri = "https://localhost:55272/api/homeconnect/callback";
+    var redirectUri = Environment.GetEnvironmentVariable("HOME_CONNECT_REDIRECT_URI") ?? "https://localhost:55272/api/homeconnect/callback";
     var success = await homeConnectService.ExchangeAuthorizationCodeAsync(code, redirectUri);
     if (success)
     {
@@ -530,9 +604,8 @@ app.MapGet("/api/homeconnect/callback", async (HttpContext context, HomeConnectS
 // SmartThings Authorization Code Flow Endpoints
 app.MapGet("/api/smartthings/login", (HttpContext context, SmartThingsService smartThingsService) =>
 {
-    // Set your redirect URI (must match what is registered in SmartThings dev portal)
-    var redirectUri = "https://c28fba2fcaf4.ngrok-free.app/api/smartthings/callback";
-    // var redirectUri = "localhost";
+    // Get redirect URI from environment variables (must match what is registered in SmartThings dev portal)
+    var redirectUri = Environment.GetEnvironmentVariable("SMARTTHINGS_REDIRECT_URI") ?? "https://8640c96ee895.ngrok-free.app/api/smartthings/callback";
     var url = smartThingsService.GetAuthorizationUrl(redirectUri, "r:devices:*");
     context.Response.Redirect(url);
     return Task.CompletedTask;
@@ -552,7 +625,7 @@ app.MapGet("/api/smartthings/callback", async (HttpContext context, SmartThingsS
         await context.Response.WriteAsync("<h2>No authorization code received.</h2>");
         return;
     }
-    var redirectUri = "https://c28fba2fcaf4.ngrok-free.app/api/smartthings/callback";
+    var redirectUri = Environment.GetEnvironmentVariable("SMARTTHINGS_REDIRECT_URI") ?? "https://8640c96ee895.ngrok-free.app/api/smartthings/callback";
     var success = await smartThingsService.ExchangeAuthorizationCodeAsync(code, redirectUri);
     if (success)
         await context.Response.WriteAsync("<h2>SmartThings authorization successful! You may now use SmartThings features.</h2>");

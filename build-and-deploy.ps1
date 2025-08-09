@@ -4,8 +4,8 @@ $ErrorActionPreference = 'Stop'
 
 # Variables
 $imageName = "smartthings-webapp"
-$imageTag = "v1.3"
-$acrName = ""
+$imageTag = "latest"
+$acrName = "magellanacralpha"
 $fullImageName = "${acrName}.azurecr.io/${imageName}:${imageTag}"
 
 Write-Host "Building Docker image..."

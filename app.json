@@ -1,5 +1,5 @@
 {
-  "appName": "02082025",
+  "appName": "09082025-3",
   "displayName": "final one",
   "description": "A SmartApp using Authorization Code flow",
   "singleInstance": false,
@@ -10,10 +10,10 @@
     "redirectUris": ["https://localhost:55272/api/smartthings/callback",
 	"https://localhost:55272/api/smartthings/callback", 
 	"localhost", 
-	"https://c28fba2fcaf4.ngrok-free.app/api/smartthings/callback",
+	"https://8640c96ee895.ngrok-free.app/api/smartthings/callback",
 	"https://andreihomeauto-g5ckceeygcgag3e0.westeurope-01.azurewebsites.net/api/smartthings/callback"
 	],
-    "scope": ["r:devices:*", "w:devices:*"],
+    "scope": ["r:devices:*", "w:devices:*", "x:devices:*"],
     "grantTypes": ["authorization_code"]
   }
 }

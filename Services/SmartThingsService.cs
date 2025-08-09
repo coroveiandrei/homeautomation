@@ -29,7 +29,8 @@ public class SmartThingsService
 
     public string GetAuthorizationUrl(string redirectUri, string scope = "r:devices:*")
     {
-        var url = $"{AuthUrl}?response_type=code&client_id={_clientId}&scope={Uri.EscapeDataString(scope)}&redirect_uri={Uri.EscapeDataString(redirectUri)}";
+        var scopes = string.Join(" ", new[] { "r:devices:*", "x:devices:*" });
+        var url = $"{AuthUrl}?response_type=code&client_id={_clientId}&scope={Uri.EscapeDataString(scopes)}&redirect_uri={Uri.EscapeDataString(redirectUri)}";
         return url;
     }
 
@@ -104,6 +105,7 @@ public class SmartThingsService
                         AddCapabilityIfExists(deviceWithStatus.Capabilities, mainComponent, "temperatureMeasurement", "temperature");
                         AddCapabilityIfExists(deviceWithStatus.Capabilities, mainComponent, "thermostatMode");
                         AddCapabilityIfExists(deviceWithStatus.Capabilities, mainComponent, "dryerOperatingState", "machineState");
+                        AddCapabilityIfExists(deviceWithStatus.Capabilities, mainComponent, "washerOperatingState", "machineState");
                         AddCapabilityIfExists(deviceWithStatus.Capabilities, mainComponent, "machineState");
                     }
                 }
@@ -123,6 +125,7 @@ public class SmartThingsService
     {
         if (string.IsNullOrEmpty(_accessToken))
             throw new InvalidOperationException("Not authenticated with SmartThings");
+
         var commandPayload = new CommandPayload
         {
             Commands = new List<DeviceCommand>
@@ -137,6 +140,15 @@ public class SmartThingsService
         };
 
         var response = await _httpClient.PostAsJsonAsync($"{BaseUrl}/devices/{deviceId}/commands", commandPayload);
+        var responseContent = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode)
+        {
+            Console.WriteLine($"SmartThings command failed: {responseContent}");
+        }
+        else
+        {
+            Console.WriteLine($"SmartThings command succeeded: {responseContent}");
+        }
         return response.IsSuccessStatusCode;
     }
 
